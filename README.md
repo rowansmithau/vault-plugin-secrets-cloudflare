@@ -5,17 +5,17 @@ revocation of [Cloudflare][cloudflare] API tokens.
 
 This is a fork of https://github.com/bloominlabs/vault-plugin-secrets-cloudflare, created because
 I wanted to see a version with the following changes:
-1. Built with go 1.21
-2. Built with cloudflare-go v0.81.0
-3. Built with vault/api v1.10.0
-4. Built with vault/sdk v0.10.2
+1. Built with updated Go
+2. Built with updated cloudflare-go
+3. Built with updated vault/api
+4. Built with updated vault/sdk
 5. Improved the README to support usability.
 
 ## Usage
 
 ### Configure Endpoint
 
-1. Download and enable plugin locally (TODO)
+1. Download and enable plugin locally
 
 2. Configure the plugin with a Cloudflare token capable of generating other tokens:
 
