@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'  # Uses the Go version from your go.mod file
+          cache: true
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "VERSION_SHORT=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: |
+          # Create build directory
+          mkdir -p dist
+          
+          # Build linux/amd64
+          echo "Building linux/amd64..."
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+            -ldflags="-s -w -X 'main.Version=${{ steps.get_version.outputs.VERSION }}'" \
+            -o dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64 \
+            ./cmd/cloudflare
+          
+          # Build linux/arm64
+          echo "Building linux/arm64..."
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+            -ldflags="-s -w -X 'main.Version=${{ steps.get_version.outputs.VERSION }}'" \
+            -o dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-arm64 \
+            ./cmd/cloudflare
+
+      - name: Create archives
+        run: |
+          cd dist
+          
+          # Create tar.gz archives for each binary
+          for binary in vault-plugin-secrets-cloudflare-*; do
+            if [ -f "$binary" ]; then
+              tar czf "${binary}.tar.gz" "$binary"
+              echo "Created ${binary}.tar.gz"
+            fi
+          done
+          
+          # Generate SHA256 checksums for all files
+          sha256sum vault-plugin-secrets-cloudflare-* > SHA256SUMS
+          
+          # List all files for verification
+          ls -la
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          # Create release notes file
+          cat > dist/RELEASE_NOTES.md << EOF
+          ## Vault Plugin Secrets Cloudflare ${{ steps.get_version.outputs.VERSION }}
+          
+          ### Installation
+          
+          Download the appropriate archive for your architecture and verify the checksum:
+          
+          \`\`\`bash
+          # Download for linux/amd64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.VERSION }}/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+          
+          # Download for linux/arm64
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.VERSION }}/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz
+          
+          # Download and verify checksums
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.VERSION }}/SHA256SUMS
+          sha256sum --check SHA256SUMS
+          
+          # Extract and install
+          tar xzf vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz
+          
+          # Register with Vault
+          export SHA256=\$(sha256sum vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64 | cut -d' ' -f1)
+          vault plugin register -sha256=\$SHA256 secret cloudflare
+          \`\`\`
+          
+          ### Changes
+          
+          EOF
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "Initial release" >> dist/RELEASE_NOTES.md
+          else
+            # Add commit messages as bullet points
+            git log --pretty=format:"- %s" $PREV_TAG..HEAD | head -20 >> dist/RELEASE_NOTES.md
+          fi
+          
+          echo "" >> dist/RELEASE_NOTES.md
+          echo "### Assets" >> dist/RELEASE_NOTES.md
+          echo "" >> dist/RELEASE_NOTES.md
+          echo "- \`vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\` - Linux AMD64 binary" >> dist/RELEASE_NOTES.md
+          echo "- \`vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz\` - Linux ARM64 binary" >> dist/RELEASE_NOTES.md
+          echo "- \`SHA256SUMS\` - Checksums for all files" >> dist/RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.get_version.outputs.VERSION }} \
+            --title "Release ${{ steps.get_version.outputs.VERSION }}" \
+            --notes-file dist/RELEASE_NOTES.md \
+            dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64 \
+            dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz \
+            dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-arm64 \
+            dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz \
+            dist/SHA256SUMS
