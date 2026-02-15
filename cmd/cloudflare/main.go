@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	cloudflare "github.com/bloominlabs/vault-plugin-secrets-cloudflare"
+	cloudflare "github.com/rowansmithau/vault-plugin-secrets-cloudflare"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/sdk/plugin"

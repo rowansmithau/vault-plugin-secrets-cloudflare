@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/mitchellh/mapstructure"
 )
 
 func pathListRoles(b *backend) *framework.Path {
@@ -82,9 +83,10 @@ func (b *backend) pathRolesRead(ctx context.Context, req *logical.Request, d *fr
 		return nil, nil
 	}
 
-	var respPolicy map[string]interface{}
-	inrec, _ := json.Marshal(entry)
-	json.Unmarshal(inrec, &respPolicy)
+	respPolicy, err := roleEntryToMap(entry)
+	if err != nil {
+		return nil, err
+	}
 
 	return &logical.Response{
 		Data: respPolicy,
@@ -114,16 +116,15 @@ func (b *backend) pathRolesWrite(ctx context.Context, req *logical.Request, d *f
 			if err != nil {
 				return logical.ErrorResponse(fmt.Sprintf("cannot parse policy document: %q", policyDocumentRaw.(string))), nil
 			}
+			var policyList []interface{}
+			if err := json.Unmarshal([]byte(policyDocument), &policyList); err != nil {
+				return logical.ErrorResponse(fmt.Sprintf("cannot parse policy document: %q", policyDocumentRaw.(string))), nil
+			}
 		}
 		roleEntry.PolicyDocument = policyDocument
 	}
 
-	var respData map[string]interface{}
-	marshalledRole, err := json.Marshal(roleEntry)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal([]byte(marshalledRole), &respData)
+	respData, err := roleEntryToMap(roleEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +162,26 @@ func (b *backend) roleRead(ctx context.Context, s logical.Storage, roleName stri
 	}
 
 	return nil, nil
+}
+
+func roleEntryToMap(roleEntry *cloudflareRoleEntry) (map[string]interface{}, error) {
+	if roleEntry == nil {
+		return nil, nil
+	}
+
+	respData := map[string]interface{}{}
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName: "json",
+		Result:  &respData,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := decoder.Decode(roleEntry); err != nil {
+		return nil, err
+	}
+
+	return respData, nil
 }
 
 type cloudflareRoleEntry struct {

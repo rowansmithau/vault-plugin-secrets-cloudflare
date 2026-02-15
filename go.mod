@@ -1,6 +1,6 @@
-module github.com/bloominlabs/vault-plugin-secrets-cloudflare
+module github.com/rowansmithau/vault-plugin-secrets-cloudflare
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/cloudflare/cloudflare-go v0.116.0

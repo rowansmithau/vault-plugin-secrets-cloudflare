@@ -44,37 +44,94 @@ func TestBackend_config_token(t *testing.T) {
 		CLOUDFLARE_TOKEN_ID = resp.ID
 	}
 
+	expiredTokenValue := ""
+	expiredTokenErrorContains := ""
+	var expiredTokenCleanup func()
+
+	if CLOUDFLARE_TOKEN != "" {
+		expiration := time.Now().UTC().Add(2 * time.Second).Truncate(time.Second)
+		expiredToken, cleanup, err := testCreateToken(t, client, cloudflare.APIToken{
+			Name:      fmt.Sprintf("vault-expired-token-%d", time.Now().UnixNano()),
+			ExpiresOn: &expiration,
+			Policies:  []cloudflare.APITokenPolicies{},
+		})
+		if err == nil {
+			expiredTokenCleanup = cleanup
+			time.Sleep(4 * time.Second)
+			expiredClient, err := createClient(expiredToken.Value)
+			if err == nil {
+				verifyResp, verifyErr := expiredClient.VerifyAPIToken(context.TODO())
+				if verifyErr != nil {
+					expiredTokenErrorContains = "encountered error when verifying token"
+				} else if verifyResp.Status != "active" {
+					expiredTokenErrorContains = "provided token is not currently active"
+				}
+			}
+			if expiredTokenErrorContains != "" {
+				expiredTokenValue = expiredToken.Value
+			} else if expiredTokenCleanup != nil {
+				expiredTokenCleanup()
+				expiredTokenCleanup = nil
+			}
+		}
+	}
+	if expiredTokenCleanup != nil {
+		defer expiredTokenCleanup()
+	}
+
 	testCases := []struct {
-		name                  string
-		configData            *rootTokenConfig
-		expectedWriteResponse map[string]interface{}
-		expectedReadResponse  map[string]interface{}
+		name                       string
+		configData                 *rootTokenConfig
+		expectedWriteResponse      map[string]interface{}
+		expectedWriteErrorContains string
+		expectedReadResponse       map[string]interface{}
 	}{
 		{
 			"errorsWithEmptyToken",
 			nil,
 			map[string]interface{}{"error": "Missing 'token' in configuration request"},
+			"",
 			map[string]interface{}{"error": "configuration does not exist. did you configure 'config/token'?"},
 		},
 		{
 			"errorsWithInvalidCredentials",
 			&rootTokenConfig{Token: "test"},
-			map[string]interface{}{"error": "encountered error when verifying token: HTTP status 400: Invalid request headers (6003)"},
+			map[string]interface{}{"error": "encountered error when verifying token: Invalid request headers (6003)"},
+			"",
 			map[string]interface{}{"error": "configuration does not exist. did you configure 'config/token'?"},
 		},
-		// TODO: add test to ensure the backend errors if the provided token is expired
-		// {
-		// 	"errorsWithInvalidatedToken",
-		// 	&tokenConfig{Token: CLOUDFLARE_TOKEN},
-		// 	nil,
-		// 	map[string]interface{}{"token": CLOUDFLARE_TOKEN},
-		// },
-		{
+	}
+
+	if CLOUDFLARE_TOKEN != "" {
+		testCases = append(testCases, struct {
+			name                       string
+			configData                 *rootTokenConfig
+			expectedWriteResponse      map[string]interface{}
+			expectedWriteErrorContains string
+			expectedReadResponse       map[string]interface{}
+		}{
 			"succeedsWithValidToken",
 			&rootTokenConfig{Token: CLOUDFLARE_TOKEN},
 			nil,
+			"",
 			map[string]interface{}{"id": CLOUDFLARE_TOKEN_ID, "token": CLOUDFLARE_TOKEN},
-		},
+		})
+	}
+
+	if expiredTokenValue != "" {
+		testCases = append(testCases, struct {
+			name                       string
+			configData                 *rootTokenConfig
+			expectedWriteResponse      map[string]interface{}
+			expectedWriteErrorContains string
+			expectedReadResponse       map[string]interface{}
+		}{
+			"errorsWithExpiredToken",
+			&rootTokenConfig{Token: expiredTokenValue},
+			nil,
+			expiredTokenErrorContains,
+			map[string]interface{}{"error": "configuration does not exist. did you configure 'config/token'?"},
+		})
 	}
 
 	for _, testCase := range testCases {
@@ -97,10 +154,15 @@ func TestBackend_config_token(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if testCase.expectedWriteResponse == nil {
-				assert.Nil(t, resp)
-			} else {
+			if testCase.expectedWriteResponse != nil {
 				assert.Equal(t, testCase.expectedWriteResponse, resp.Data)
+			} else if testCase.expectedWriteErrorContains != "" {
+				if assert.NotNil(t, resp) {
+					errorMessage, _ := resp.Data["error"].(string)
+					assert.Contains(t, errorMessage, testCase.expectedWriteErrorContains)
+				}
+			} else {
+				assert.Nil(t, resp)
 			}
 
 			confReq.Operation = logical.ReadOperation
@@ -199,6 +261,53 @@ func TestBackend_rotate_root(t *testing.T) {
 	}
 }
 
+func TestBackend_rotate_root_failure_does_not_overwrite(t *testing.T) {
+	CLOUDFLARE_TOKEN := os.Getenv("TEST_CLOUDFLARE_TOKEN")
+
+	if CLOUDFLARE_TOKEN == "" {
+		t.Skip("missing 'TEST_CLOUDFLARE_TOKEN'. skipping...")
+	}
+
+	config := logical.TestBackendConfig()
+	config.StorageView = &logical.InmemStorage{}
+	b, err := Factory(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	originalConfig := &rootTokenConfig{TokenID: "invalid-token-id", Token: CLOUDFLARE_TOKEN}
+	entry, err := logical.StorageEntryJSON(configTokenKey, originalConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.StorageView.Put(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	confReq := &logical.Request{
+		Operation: logical.UpdateOperation,
+		Path:      "config/rotate-root",
+		Storage:   config.StorageView,
+		Data:      map[string]interface{}{},
+	}
+
+	resp, err := b.HandleRequest(context.Background(), confReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp == nil || !resp.IsError() {
+		t.Fatalf("expected rotate-root to return an error response")
+	}
+
+	storedConfig, err := b.(*backend).readConfigToken(context.Background(), config.StorageView)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, originalConfig.Token, storedConfig.Token)
+	assert.Equal(t, originalConfig.TokenID, storedConfig.TokenID)
+}
+
 const synaticallyValidPolicy = `[
 	{
 		"effect": "allow",
@@ -256,13 +365,12 @@ func TestBackend_roles(t *testing.T) {
 			map[string]interface{}{"error": "cannot parse policy document: \"{'}\""},
 			nil,
 		},
-		// TODO: add more validation to the parsed struct
-		// {
-		// 	"errorsWhenJSONIsntList",
-		// 	map[string]interface{}{"policy_document": "{}"},
-		// 	map[string]interface{}{"error": "cannot parse policy document: \"{'}\""},
-		// 	nil,
-		// },
+		{
+			"errorsWhenJSONIsntList",
+			map[string]interface{}{"policy_document": "{}"},
+			map[string]interface{}{"error": "cannot parse policy document: \"{}\""},
+			nil,
+		},
 		{
 			"succeedsWithValidJSONPolicyDocument",
 			map[string]interface{}{"policy_document": `[{"test": "test"}]`},
@@ -313,6 +421,39 @@ func TestBackend_roles(t *testing.T) {
 	}
 }
 
+func TestBackend_creds_create_invalid_policy_document(t *testing.T) {
+	config := logical.TestBackendConfig()
+	config.StorageView = &logical.InmemStorage{}
+	b, err := Factory(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roleName := "invalid-policy"
+	invalidPolicy := "{invalid"
+	entry, err := logical.StorageEntryJSON("role/"+roleName, map[string]interface{}{"policy_document": invalidPolicy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.StorageView.Put(context.Background(), entry); err != nil {
+		t.Fatal(err)
+	}
+
+	confReq := &logical.Request{
+		Operation: logical.ReadOperation,
+		Path:      fmt.Sprintf("creds/%s", roleName),
+		Storage:   config.StorageView,
+	}
+
+	resp, err := b.HandleRequest(context.Background(), confReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedError := fmt.Sprintf("failed to unmarshal '%s' into a list of cloudflare policies. ensure your configuration is correct", invalidPolicy)
+	assert.Equal(t, map[string]interface{}{"error": expectedError}, resp.Data)
+}
+
 const validPolicy = `
 [{"effect":"allow","resources":{"com.cloudflare.api.account.zone.a1e23bc2933e158857087ff3310c4e40":"*"},"permission_groups":[{"id":"4755a26eedb94da69e1066d98aa820be","name":"DNS Write"}]}]
 `
@@ -331,26 +472,34 @@ func TestBackend_creds_create(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	conditionJSON := `{"request.ip":{"in":["203.0.113.10"]}}`
+	expectedCondition := &cloudflare.APITokenCondition{
+		RequestIP: &cloudflare.APITokenRequestIPCondition{
+			In: []string{"203.0.113.10"},
+		},
+	}
+
 	testCases := []struct {
 		name               string
 		rolesData          map[string]interface{}
 		credsData          map[string]interface{}
 		expectedCredsError map[string]interface{}
+		expectedCondition  *cloudflare.APITokenCondition
 	}{
 		{
 			"succeedsWithValidPolicyDocument",
 			map[string]interface{}{"policy_document": validPolicy},
 			nil,
 			nil,
+			nil,
 		},
-		// TODO: add test for applying conditions to the api token
-		//       https://api.cloudflare.com/#user-api-tokens-create-token
-		// {
-		// 	"succeedsWithValidPolicyDocument",
-		// 	map[string]interface{}{"policy_document": validPolicy},
-		// 	nil,
-		// 	nil,
-		// },
+		{
+			"succeedsWithCondition",
+			map[string]interface{}{"policy_document": validPolicy},
+			map[string]interface{}{"condition": conditionJSON},
+			nil,
+			expectedCondition,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -415,6 +564,16 @@ func TestBackend_creds_create(t *testing.T) {
 			}
 
 			createdToken, err := c.GetAPIToken(context.TODO(), tokenID)
+			if err != nil {
+				t.Fatalf("failed to get token '%s'. err: %s", tokenID, err)
+			}
+
+			if testCase.expectedCondition != nil {
+				if assert.NotNil(t, createdToken.Condition) {
+					assert.Equal(t, testCase.expectedCondition, createdToken.Condition)
+				}
+			}
+
 			if err != nil {
 				t.Fatalf("failed to get token '%s'. err: %s", tokenID, err)
 			}
