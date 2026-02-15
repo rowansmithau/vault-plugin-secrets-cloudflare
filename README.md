@@ -10,6 +10,7 @@ I wanted to see a version with the following changes:
 3. Built with updated vault/api
 4. Built with updated vault/sdk
 5. Improved the README to support usability.
+6. Various other code improvements.
 
 ## Usage
 
@@ -19,7 +20,7 @@ I wanted to see a version with the following changes:
 
 2. Configure the plugin with a Cloudflare token capable of generating other tokens:
 
-```
+```bash
 vault write /cloudflare/config/token token=<token>
 ```
 
@@ -39,8 +40,8 @@ An example policy which allows for reading and editing of DNS records on a zone 
 
 1. Create a role and supply an appropriate policy:
 
-```
-vault write /cloudflare/roles/<role-name> policy_document=-<<EOF
+```bash
+$ vault write /cloudflare/roles/test-role policy_document=-<<EOF
 [
   {
         "effect": "allow",
@@ -62,10 +63,28 @@ vault write /cloudflare/roles/<role-name> policy_document=-<<EOF
 EOF
 ```
 
-### Generate a Cloudflare token using the role:
+### Read the configuration of a role:
 
+```bash
+$ vault read cloudflare/roles/test-role
+Key                Value
+---                -----
+policy_document    [{"effect":"allow","permission_groups":[{"id":"82e64a83756745bbbb1c9c2701bf816b","name":"DNS Read"},{"id":"4755a26eedb94da69e1066d98aa820be","name":"DNS Write"}],"resources":{"com.cloudflare.api.account.zone.069d3066870c958bad1cd2a767b78g86":"*"}}]
 ```
-vault read /cloudflare/creds/<role-name>
+
+### Generate a new Token
+
+Perform a 'read' operation on the `creds/<role-name>` endpoint.
+
+```bash
+$ vault read cloudflare/creds/test-role
+Key                Value
+---                -----
+lease_id           cloudflare/creds/test-role/956Fo9MQgleoqosK5wuMVwPC
+lease_duration     768h
+lease_renewable    true
+id                 9c40db059267e91c7f3f22220c1536ed
+token              <token>
 ```
 
 ### Rotating the Root Token
@@ -73,55 +92,15 @@ vault read /cloudflare/creds/<role-name>
 The plugin supports rotating the configured admin token to seamlessly improve
 security.
 
-To rotate the token, perform a 'write' operation on the
-`config/rotate-root` endpoint
+To rotate the token, perform a forced write operation on the
+`config/rotate-root` endpoint:
 
 ```bash
-> export VAULT_ADDR="http://localhost:8200"
-> vault write -f config/rotate-root
+> vault write -f cloudflare/config/rotate-root
 Key      Value
 ---      -----
 name     vault-admin-{timestamp in nano seconds}
 ```
 
-### Generate a new Token
-
-To generate a new token:
-
-[Create a new cloudflare policy](#configure-policies) and perform a 'read' operation on the `creds/<role-name>` endpoint.
-
-```bash
-# To read data using the api
-$ vault read cloudflare/role/dns-edit
-Key                Value
----                -----
-lease_id           cloudflare/creds/test/956Fo9MQgleoqosK5wuMVwPC
-lease_duration     768h
-lease_renewable    true
-id                 9c40db059267e91c7f3f22220c1536ed
-token              <token>
-```
-
-## Development
-
-The provided [Earthfile] ([think makefile, but using
-docker](https://earthly.dev)) is used to build, test, and publish the plugin.
-See the build targets for more information. Common targets include
-
-```bash
-# build a local version of the plugin
-$ earthly +build
-
-# execute integration tests
-#
-# use https://developers.cloudflare.com/api/tokens/create to create a token
-# with 'User:API Tokens:Edit' permissions
-$ TEST_CLOUDFLARE_TOKEN=<YOUR_CLOUDFLARE_TOKEN> earthly --secret TEST_CLOUDFLARE_TOKEN +test
-
-# start vault and enable the plugin locally
-earthly +dev
-```
-
 [vault]: https://www.vaultproject.io/
 [cloudflare]: https://www.cloudflare.com/
-[earthfile]: ./Earthfile

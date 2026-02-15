@@ -49,7 +49,10 @@ func (b *backend) pathConfigRotateRootUpdate(ctx context.Context, req *logical.R
 		return logical.ErrorResponse("Cannot call config/rotate-root when token is empty"), nil
 	}
 
-	newTokenValue, err := client.RollAPIToken(context.TODO(), config.TokenID)
+	newTokenValue, err := client.RollAPIToken(ctx, config.TokenID)
+	if err != nil {
+		return logical.ErrorResponse(fmt.Sprintf("error rotating root token: %s", err)), nil
+	}
 
 	config.Token = newTokenValue
 

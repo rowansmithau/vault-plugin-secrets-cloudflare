@@ -15,7 +15,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21.4'
+        go-version: '1.26.0'
 
     - name: Build
       run: CGO_ENABLED=0 go build -o vault-plugin-secrets-cloudflare cmd/cloudflare/main.go

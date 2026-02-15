@@ -95,7 +95,7 @@ func (b *backend) pathConfigTokenWrite(ctx context.Context, req *logical.Request
 		return nil, err
 	}
 
-	resp, err := client.VerifyAPIToken(context.TODO())
+	resp, err := client.VerifyAPIToken(ctx)
 	if err != nil {
 		return logical.ErrorResponse(fmt.Sprintf("encountered error when verifying token: %s", err)), nil
 	}

@@ -78,7 +78,7 @@ func (b *backend) pathCredsRead(ctx context.Context, req *logical.Request, d *fr
 	if roleEntry.PolicyDocument != "" {
 		err = json.Unmarshal([]byte(roleEntry.PolicyDocument), &policies)
 		if err != nil {
-			return logical.ErrorResponse("failed to marshal '%s' into a list of cloudflare policies. ensure your configuration is correct", roleEntry.PolicyDocument), nil
+			return logical.ErrorResponse(fmt.Sprintf("failed to unmarshal '%s' into a list of cloudflare policies. ensure your configuration is correct", roleEntry.PolicyDocument)), nil
 		}
 	}
 
