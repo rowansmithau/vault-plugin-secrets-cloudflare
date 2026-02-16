@@ -113,18 +113,13 @@ jobs:
           fi
           
           echo "" >> dist/RELEASE_NOTES.md
-          echo "### Assets" >> dist/RELEASE_NOTES.md
-          echo "" >> dist/RELEASE_NOTES.md
-          echo "- \`vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\` - Linux AMD64 binary" >> dist/RELEASE_NOTES.md
-          echo "- \`vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz\` - Linux ARM64 binary" >> dist/RELEASE_NOTES.md
-          echo "- \`SHA256SUMS\` - Checksums for all files" >> dist/RELEASE_NOTES.md
 
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create ${{ steps.get_version.outputs.VERSION }} \
-            --title "Release ${{ steps.get_version.outputs.VERSION }}" \
+            --title "${{ steps.get_version.outputs.VERSION }}" \
             --notes-file dist/RELEASE_NOTES.md \
             dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64 \
             dist/vault-plugin-secrets-cloudflare-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz \
