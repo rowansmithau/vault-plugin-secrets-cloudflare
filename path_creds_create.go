@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/vault/sdk/logical"
 )
 
-// maxTokenNameLength is the maximum length for the name of a Nomad access
+// maxTokenNameLength is the maximum length for the name of a Cloudflare API
 // token
 const maxTokenNameLength = 120
 
@@ -45,8 +45,10 @@ func pathCredsCreate(b *backend) *framework.Path {
 			},
 		},
 
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.ReadOperation: b.pathCredsRead,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.ReadOperation: &framework.PathOperation{
+				Callback: b.pathCredsRead,
+			},
 		},
 	}
 }
@@ -98,7 +100,7 @@ func (b *backend) pathCredsRead(ctx context.Context, req *logical.Request, d *fr
 
 	ttl, _, err := framework.CalculateTTL(b.System(), 0, lease.TTL, 0, lease.MaxTTL, 0, time.Time{})
 	if err != nil {
-		return logical.ErrorResponse("failed to caluclate ttl. err: %s", err), nil
+		return logical.ErrorResponse("failed to calculate ttl. err: %s", err), nil
 	}
 
 	var expirationDate time.Time = time.Now().UTC().Add(ttl).Truncate(time.Second)

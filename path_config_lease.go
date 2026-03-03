@@ -24,15 +24,34 @@ func pathConfigLease(b *backend) *framework.Path {
 			},
 		},
 
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.ReadOperation:   b.pathLeaseRead,
-			logical.UpdateOperation: b.pathLeaseUpdate,
-			logical.DeleteOperation: b.pathLeaseDelete,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.ReadOperation: &framework.PathOperation{
+				Callback: b.pathLeaseRead,
+			},
+			logical.CreateOperation: &framework.PathOperation{
+				Callback: b.pathLeaseUpdate,
+			},
+			logical.UpdateOperation: &framework.PathOperation{
+				Callback: b.pathLeaseUpdate,
+			},
+			logical.DeleteOperation: &framework.PathOperation{
+				Callback: b.pathLeaseDelete,
+			},
 		},
+
+		ExistenceCheck: b.pathLeaseExistenceCheck,
 
 		HelpSynopsis:    pathConfigLeaseHelpSyn,
 		HelpDescription: pathConfigLeaseHelpDesc,
 	}
+}
+
+func (b *backend) pathLeaseExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
+	entry, err := b.LeaseConfig(ctx, req.Storage)
+	if err != nil {
+		return false, err
+	}
+	return entry != nil, nil
 }
 
 // Sets the lease configuration parameters

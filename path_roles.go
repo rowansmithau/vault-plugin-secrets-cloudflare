@@ -15,8 +15,10 @@ func pathListRoles(b *backend) *framework.Path {
 	return &framework.Path{
 		Pattern: "roles/?$",
 
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.ListOperation: b.pathRoleList,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.ListOperation: &framework.PathOperation{
+				Callback: b.pathRoleList,
+			},
 		},
 
 		HelpSynopsis:    pathListRolesHelpSyn,
@@ -45,15 +47,34 @@ func pathRoles(b *backend) *framework.Path {
 			},
 		},
 
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.DeleteOperation: b.pathRolesDelete,
-			logical.ReadOperation:   b.pathRolesRead,
-			logical.UpdateOperation: b.pathRolesWrite,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.DeleteOperation: &framework.PathOperation{
+				Callback: b.pathRolesDelete,
+			},
+			logical.ReadOperation: &framework.PathOperation{
+				Callback: b.pathRolesRead,
+			},
+			logical.CreateOperation: &framework.PathOperation{
+				Callback: b.pathRolesWrite,
+			},
+			logical.UpdateOperation: &framework.PathOperation{
+				Callback: b.pathRolesWrite,
+			},
 		},
+
+		ExistenceCheck: b.pathRolesExistenceCheck,
 
 		HelpSynopsis:    pathRolesHelpSyn,
 		HelpDescription: pathRolesHelpDesc,
 	}
+}
+
+func (b *backend) pathRolesExistenceCheck(ctx context.Context, req *logical.Request, d *framework.FieldData) (bool, error) {
+	entry, err := b.roleRead(ctx, req.Storage, d.Get("name").(string))
+	if err != nil {
+		return false, err
+	}
+	return entry != nil, nil
 }
 
 func (b *backend) pathRoleList(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
@@ -199,7 +220,7 @@ const pathListRolesHelpSyn = `List the existing roles in this backend`
 const pathListRolesHelpDesc = `Roles will be listed by the role name.`
 
 const pathRolesHelpSyn = `
-Read, write and reference cloudflare policies that toekn can be made for.
+Read, write and reference cloudflare policies that token can be made for.
 `
 
 const pathRolesHelpDesc = `
@@ -212,6 +233,6 @@ then a user could request access credentials at "cloudflare/creds/deploy".
 You can submit policies inline using a policy on disk (see Vault
 documentation for more information
 (https://www.vaultproject.io/docs/commands/write#examples)) or by submitting
-a compact JSON as a value. Policies are only syntatically validated on write.
+a compact JSON as a value. Policies are only syntactically validated on write.
 To validate the keys, attempt to read token after writing the policy.
 `

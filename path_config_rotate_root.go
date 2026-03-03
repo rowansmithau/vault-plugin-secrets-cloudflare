@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
 )
@@ -42,7 +41,7 @@ func (b *backend) pathConfigRotateRootUpdate(ctx context.Context, req *logical.R
 	}
 	var config rootTokenConfig
 	if err := tokenConfig.DecodeJSON(&config); err != nil {
-		return nil, errwrap.Wrapf("error reading root configuration: {{err}}", err)
+		return nil, fmt.Errorf("error reading root configuration: %w", err)
 	}
 
 	if config.Token == "" {
@@ -58,10 +57,10 @@ func (b *backend) pathConfigRotateRootUpdate(ctx context.Context, req *logical.R
 
 	newEntry, err := logical.StorageEntryJSON(configTokenKey, config)
 	if err != nil {
-		return nil, errwrap.Wrapf("error generating new config/root JSON: {{err}}", err)
+		return nil, fmt.Errorf("error generating new config/root JSON: %w", err)
 	}
 	if err := req.Storage.Put(ctx, newEntry); err != nil {
-		return nil, errwrap.Wrapf("error saving new config/root: {{err}}", err)
+		return nil, fmt.Errorf("error saving new config/root: %w", err)
 	}
 
 	return &logical.Response{

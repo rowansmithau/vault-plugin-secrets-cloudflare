@@ -59,7 +59,7 @@ func (b *backend) secretTokenRenew(ctx context.Context, req *logical.Request, d 
 
 	ttl, _, err := framework.CalculateTTL(b.System(), req.Secret.Increment, lease.TTL, 0, lease.MaxTTL, 0, req.Secret.IssueTime)
 	if err != nil {
-		return logical.ErrorResponse("failed to caluclate ttl. err: %s", err), nil
+		return logical.ErrorResponse("failed to calculate ttl. err: %s", err), nil
 	}
 
 	// Adding a small buffer since the TTL will be calculated again after this

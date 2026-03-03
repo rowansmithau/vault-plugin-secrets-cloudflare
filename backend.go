@@ -16,7 +16,7 @@ type backend struct {
 
 var _ logical.Factory = Factory
 
-// Factory configures and returns Mock backends
+// Factory configures and returns Cloudflare backends
 func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
 	b, err := newBackend()
 	if err != nil {
