@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
 )
@@ -21,14 +20,25 @@ func pathConfigToken(b *backend) *framework.Path {
 			},
 		},
 
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.ReadOperation:   b.pathConfigTokenRead,
-			logical.CreateOperation: b.pathConfigTokenWrite,
-			logical.UpdateOperation: b.pathConfigTokenWrite,
-			logical.DeleteOperation: b.pathConfigTokenDelete,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.ReadOperation: &framework.PathOperation{
+				Callback: b.pathConfigTokenRead,
+			},
+			logical.CreateOperation: &framework.PathOperation{
+				Callback: b.pathConfigTokenWrite,
+			},
+			logical.UpdateOperation: &framework.PathOperation{
+				Callback: b.pathConfigTokenWrite,
+			},
+			logical.DeleteOperation: &framework.PathOperation{
+				Callback: b.pathConfigTokenDelete,
+			},
 		},
 
 		ExistenceCheck: b.configTokenExistenceCheck,
+
+		HelpSynopsis:    pathConfigTokenHelpSyn,
+		HelpDescription: pathConfigTokenHelpDesc,
 	}
 }
 
@@ -52,7 +62,7 @@ func (b *backend) readConfigToken(ctx context.Context, storage logical.Storage) 
 
 	conf := &rootTokenConfig{}
 	if err := entry.DecodeJSON(conf); err != nil {
-		return nil, errwrap.Wrapf("error reading nomad access configuration: {{err}}", err)
+		return nil, fmt.Errorf("error reading cloudflare access configuration: %w", err)
 	}
 
 	return conf, nil
@@ -133,7 +143,7 @@ Configure Cloudflare token and options used by vault
 `
 
 const pathConfigTokenHelpDesc = `
-Will confugre this mount with the token used by Vault for all Cloudflare
+Will configure this mount with the token used by Vault for all Cloudflare
 operations on this mount. Must be configured with: com.cloudflare.api.token.create.
 
 For instructions on how to get and/or create a cloudflare token see their
