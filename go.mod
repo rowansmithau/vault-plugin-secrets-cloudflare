@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/cloudflare/cloudflare-go v0.116.0
 	github.com/hashicorp/go-hclog v1.6.3
-	github.com/hashicorp/vault/api v1.22.0
+	github.com/hashicorp/vault/api v1.23.0
 	github.com/hashicorp/vault/sdk v0.23.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.11.1
